@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Dark graphite executive theme (single theme, no light mode) */
+    --background: 222 18% 7%;        /* deep graphite */
+    --foreground: 210 20% 96%;       /* near-white */
+
+    --card: 222 16% 10%;             /* slightly lighter graphite */
+    --card-foreground: 210 20% 96%;
+    --elevated: 220 15% 13%;         /* hover / raised surfaces */
+
+    --muted: 220 12% 16%;
+    --muted-foreground: 215 14% 62%; /* soft gray */
+
+    --primary: 213 94% 60%;          /* professional blue */
+    --primary-foreground: 213 100% 97%;
+
+    --border: 220 12% 18%;
+    --input: 220 12% 18%;
+    --ring: 213 94% 60%;
+
+    --status-green: 152 58% 46%;     /* on track / completed */
+    --status-gold: 43 89% 55%;       /* pending / attention */
+    --status-orange: 20 90% 58%;     /* blocked / urgent / past due */
+    --status-gray: 215 12% 52%;      /* planned / inactive */
+
+    --radius: 0.75rem;
+  }
+
+  * { @apply border-border; }
+  html { color-scheme: dark; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+  }
+  ::selection { @apply bg-primary/30; }
+}
+
+@layer utilities {
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, hsl(0 0% 100% / 0.04), transparent);
+    animation: shimmer 1.6s infinite;
+  }
+}
