@@ -5,7 +5,13 @@ import type { Project } from "@/domain/project";
 import { ProjectCard } from "./project-card";
 import { EmptyState } from "@/components/ui/empty-state";
 
-export function ProjectGrid({ projects }: { projects: Project[] }) {
+export function ProjectGrid({
+  projects,
+  onHide,
+}: {
+  projects: Project[];
+  onHide?: (id: string) => void;
+}) {
   if (projects.length === 0) {
     return (
       <EmptyState
@@ -18,7 +24,7 @@ export function ProjectGrid({ projects }: { projects: Project[] }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {projects.map((p, i) => (
-        <ProjectCard key={p.id} project={p} index={i} />
+        <ProjectCard key={p.id} project={p} index={i} onHide={onHide} />
       ))}
     </div>
   );

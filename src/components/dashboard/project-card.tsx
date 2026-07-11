@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { CalendarClock, History } from "lucide-react";
+import { CalendarClock, History, EyeOff } from "lucide-react";
 import type { Project } from "@/domain/project";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -11,13 +11,36 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { OwnerAvatars } from "@/components/ui/owner-avatars";
 import { formatDate, relativeTime, stripMarkdown } from "@/lib/utils";
 
-export function ProjectCard({ project, index = 0 }: { project: Project; index?: number }) {
+export function ProjectCard({
+  project,
+  index = 0,
+  onHide,
+}: {
+  project: Project;
+  index?: number;
+  onHide?: (id: string) => void;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, delay: Math.min(index * 0.03, 0.2) }}
+      className="group relative h-full"
     >
+      {onHide ? (
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onHide(project.id);
+          }}
+          title="Hide from view"
+          aria-label="Hide from view"
+          className="absolute right-2 top-2 z-10 rounded-md border border-border bg-elevated p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+        >
+          <EyeOff className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
       <Link href={`/project/${project.id}`} className="block h-full focus:outline-none">
         <Card className="flex h-full flex-col transition-all hover:border-primary/40 hover:shadow-elevated focus-visible:ring-1 focus-visible:ring-ring">
           <CardHeader>
