@@ -63,6 +63,9 @@ export async function fetchBoardBundle(creds = readTrelloCredentials()): Promise
       {
         filter: "open",
         fields: "id,name,desc,idList,idMembers,labels,due,dateLastActivity,badges,closed",
+        // Explicit max: without it we are relying on an undocumented default
+        // page size, which risks silently truncating a large board.
+        limit: "1000",
       },
       creds,
     ),
