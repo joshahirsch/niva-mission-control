@@ -10,7 +10,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { PriorityBadge } from "@/components/ui/priority-badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { OwnerAvatars } from "@/components/ui/owner-avatars";
-import { cn, formatDate, relativeTime, stripMarkdown } from "@/lib/utils";
+import { cn, formatDate, progressLabel, relativeTime, stripMarkdown } from "@/lib/utils";
 import { Markdown } from "@/components/ui/markdown";
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
@@ -80,7 +80,12 @@ export function ProjectDetail({ project }: { project: Project }) {
           <Fact label="Progress">
             <div className="space-y-1.5">
               <span className="tabular-nums">{project.progress}%</span>
-              <ProgressBar value={project.progress} />
+              <ProgressBar value={project.progress} inferred={project.checklistTotal === 0} />
+              <span className="block text-[11px] text-muted-foreground">
+                {project.checklistTotal > 0
+                  ? progressLabel(project.checklistDone, project.checklistTotal)
+                  : "Stage-based estimate (no checklist)"}
+              </span>
             </div>
           </Fact>
           <Fact label="Target Completion">

@@ -67,3 +67,8 @@ export function stripMarkdown(md: string): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+/** Describes where a progress figure came from: measured tasks vs stage estimate. */
+export function progressLabel(checklistDone: number, checklistTotal: number): string {
+  return checklistTotal > 0 ? `${checklistDone}/${checklistTotal} tasks` : "stage-based";
+}

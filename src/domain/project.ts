@@ -44,8 +44,13 @@ export const ProjectSchema = z.object({
   status: ProjectStatusSchema,
   priority: ProjectPrioritySchema,
   phase: ProjectPhaseSchema,
-  /** 0-100 completion. */
+  /** 0-100 completion. Measured from the checklist when one exists, otherwise
+   * inferred from pipeline phase (see checklistTotal to tell which). */
   progress: z.number().min(0).max(100),
+  /** Raw checklist counts. checklistTotal === 0 means the card has no checklist,
+   * so `progress` is a stage-based estimate rather than a measurement. */
+  checklistDone: z.number().min(0),
+  checklistTotal: z.number().min(0),
   owners: z.array(OwnerSchema),
   /** ISO date strings (nullable when unset). */
   targetCompletion: z.string().nullable(),

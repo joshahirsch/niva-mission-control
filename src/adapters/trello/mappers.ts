@@ -84,10 +84,35 @@ export function mapPriority(labels: TrelloLabel[]): ProjectPriority {
   return "Normal";
 }
 
-export function mapProgress(card: TrelloCard, status: ProjectStatus): number {
+/**
+ * Stage-based progress estimate, used only when a card has no checklist.
+ * These are deliberate approximations of pipeline position — the UI marks any
+ * value derived this way as an estimate so it is never mistaken for a measurement.
+ */
+const PHASE_PROGRESS: Record<ProjectPhase, number> = {
+  Planned: 0,
+  "In Design": 15,
+  Ready: 30,
+  "In Progress": 50,
+  Blocked: 50,
+  "Leadership Review": 75,
+  Validation: 90,
+  Completed: 100,
+};
+
+export function mapProgress(
+  card: TrelloCard,
+  status: ProjectStatus,
+  phase: ProjectPhase,
+): number {
   const { checkItems, checkItemsChecked } = card.badges ?? { checkItems: 0, checkItemsChecked: 0 };
+  // Measured: the team tracked real tasks on this card.
   if (checkItems > 0) return Math.round((checkItemsChecked / checkItems) * 100);
-  return status === "Completed" ? 100 : 0;
+  if (status === "Completed") return 100;
+  // Inferred: no checklist, so fall back to where the card sits in the pipeline.
+  // Returning 0 here would read as "nothing done", which is a different claim
+  // than "not tracked" — and a misleading one on an executive dashboard.
+  return PHASE_PROGRESS[phase] ?? 0;
 }
 
 function mapOwner(member: TrelloMember): Owner {
@@ -153,7 +178,8 @@ export function bundleToProjects(bundle: TrelloBoardBundle): Project[] {
       const phase = mapPhase(listById.get(card.idList));
       const status = mapStatus(card.labels ?? [], phase);
       const priority = mapPriority(card.labels ?? []);
-      const progress = mapProgress(card, status);
+      const progress = mapProgress(card, status, phase);
+      const badges = card.badges ?? { checkItems: 0, checkItemsChecked: 0 };
       const owners = card.idMembers
         .map((id) => memberById.get(id))
         .filter((m): m is TrelloMember => Boolean(m))
@@ -166,6 +192,8 @@ export function bundleToProjects(bundle: TrelloBoardBundle): Project[] {
         priority,
         phase,
         progress,
+        checklistDone: badges.checkItemsChecked,
+        checklistTotal: badges.checkItems,
         owners,
         targetCompletion: card.due,
         lastUpdated: card.dateLastActivity,

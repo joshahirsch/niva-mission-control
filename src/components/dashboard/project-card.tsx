@@ -11,7 +11,7 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { OwnerAvatars } from "@/components/ui/owner-avatars";
 import { PipelineStepper } from "@/components/ui/pipeline-stepper";
 import { isPastDue as computeIsPastDue } from "@/lib/business/portfolio";
-import { cn, dueLabel, formatDate, relativeTime, stripMarkdown } from "@/lib/utils";
+import { cn, dueLabel, formatDate, progressLabel, relativeTime, stripMarkdown } from "@/lib/utils";
 
 export function ProjectCard({
   project,
@@ -80,10 +80,12 @@ export function ProjectCard({
               </div>
               <div className="text-right leading-tight">
                 <div className="text-xs font-medium tabular-nums text-foreground">{project.progress}%</div>
-                <div className="text-[10px] text-muted-foreground">complete</div>
+                <div className="text-[10px] text-muted-foreground">
+                  {progressLabel(project.checklistDone, project.checklistTotal)}
+                </div>
               </div>
             </div>
-            <ProgressBar value={project.progress} />
+            <ProgressBar value={project.progress} inferred={project.checklistTotal === 0} />
 
             <div className="flex items-center justify-between">
               <OwnerAvatars owners={project.owners} />
