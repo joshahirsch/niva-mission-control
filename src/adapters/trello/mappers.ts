@@ -59,6 +59,29 @@ export function isTemplateList(listName: string | undefined): boolean {
   return n.startsWith("template") || n.includes("templates");
 }
 
+/**
+ * Trello's scrum template seeds a board with furniture that is not work:
+ *   - bracketed example cards: "[Example Feature]", "[Task] Template"
+ *   - a descriptive header card inside each list, named after the list itself
+ *     ("🗓 Sprint Backlog" sitting in "🗓 Sprint Backlog - [Timeline]")
+ * Both would otherwise appear as initiatives on the executive board.
+ */
+export function isScaffoldingCard(cardName: string, listName: string | undefined): boolean {
+  const name = cardName.trim();
+  if (!name) return true;
+
+  // "[Example Feature]", "[Task] Template", "[Example task]" ...
+  if (name.startsWith("[")) return true;
+
+  // A card whose name mirrors the list it sits in is that list's header card.
+  const card = normalizeListName(name);
+  const list = normalizeListName(listName ?? "");
+  if (card && list && (list === card || list.startsWith(`${card} `) || list.startsWith(`${card}-`))) {
+    return true;
+  }
+  return false;
+}
+
 export function mapPhase(listName: string | undefined): ProjectPhase {
   if (!listName) return "Planned";
   const n = normalizeListName(listName);
@@ -222,6 +245,7 @@ export function bundleToProjects(bundle: TrelloBoardBundle, source: ProjectSourc
     .filter((c) => !c.closed)
     // Template/example scaffolding is board furniture, not initiatives.
     .filter((c) => !isTemplateList(listById.get(c.idList)))
+    .filter((c) => !isScaffoldingCard(c.name, listById.get(c.idList)))
     .map((card): Project => {
       const phase = mapPhase(listById.get(card.idList));
       const status = mapStatus(card.labels ?? [], phase);
