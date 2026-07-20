@@ -2,15 +2,21 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * When MISSION_CONTROL_API_ONLY=true, only GET /api/v1/delivery is reachable.
- * The API service has no UI and does not serve browser assets. Everything else
- * gets a plain 404 — no redirect to Google Sign-In / IAP.
+ * When MISSION_CONTROL_API_ONLY=true, only the bearer-token v1 routes are
+ * reachable (`/api/v1/delivery`, `/api/v1/weekly-report`). The API service has
+ * no UI and does not serve browser assets. Everything else gets a plain 404 —
+ * no redirect to Google Sign-In / IAP.
  *
  * When unset or false, this middleware is a no-op so the existing IAP-protected
  * Mission Control app behaves unchanged.
  */
 /** Env key read dynamically so Cloud Run can set this at runtime, not only at build time. */
 const API_ONLY_ENV = "MISSION_CONTROL_API_ONLY";
+
+const API_ONLY_ALLOWLIST = new Set([
+  "/api/v1/delivery",
+  "/api/v1/weekly-report",
+]);
 
 export function isApiOnlyMode(
   value: string | undefined = process.env[API_ONLY_ENV],
@@ -19,7 +25,7 @@ export function isApiOnlyMode(
 }
 
 export function isAllowedInApiOnlyMode(pathname: string): boolean {
-  return pathname === "/api/v1/delivery";
+  return API_ONLY_ALLOWLIST.has(pathname);
 }
 
 export function middleware(request: NextRequest) {

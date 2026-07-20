@@ -1,9 +1,7 @@
 import type { Project } from "@/domain/project";
 import type { Filters } from "@/components/dashboard/filter-panel";
 import type { PortfolioFilterKey } from "@/components/dashboard/portfolio-summary";
-import { isActive, isOnTrack } from "./portfolio";
-
-const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+import { isActive, isCompletedThisWeek, isOnTrack } from "./portfolio";
 
 function matchesSearch(p: Project, q: string): boolean {
   if (!q) return true;
@@ -48,7 +46,7 @@ function matchesPortfolioKey(p: Project, key: PortfolioFilterKey | null): boolea
     case "blocked":
       return p.status === "Blocked";
     case "completed":
-      return p.status === "Completed" && Date.now() - new Date(p.lastUpdated).getTime() <= ONE_WEEK_MS;
+      return isCompletedThisWeek(p);
   }
 }
 

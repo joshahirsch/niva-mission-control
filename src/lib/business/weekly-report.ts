@@ -1,23 +1,36 @@
 import type { Project } from "@/domain/project";
-import { computePortfolioSummary, recentlyCompleted, upcomingDueDates } from "./portfolio";
-import { formatDate } from "@/lib/utils";
+import {
+  completedThisWeekProjects,
+  computePortfolioSummary,
+  upcomingDueDates,
+} from "./portfolio";
+import {
+  formatReportDate,
+  formatReportGeneratedAt,
+  toAsOfDate,
+  type AsOfInstant,
+} from "./reporting-time";
+
+export { weeklyReportFilename } from "./reporting-time";
 
 /**
  * Renders a Markdown weekly status report from the same data the dashboard
  * shows — meant for pasting into Slack/email or handing to people who don't
  * have (or want) a login to the live app.
+ *
+ * `asOf` defaults to the current instant (browser path). Inject a fixed
+ * timestamp for deterministic tests and the secured API endpoint.
  */
-export function buildWeeklyReportMarkdown(projects: Project[], now = Date.now()): string {
-  const summary = computePortfolioSummary(projects, now);
-  const upcoming = upcomingDueDates(projects, now);
-  const wins = recentlyCompleted(projects, now);
+export function buildWeeklyReportMarkdown(
+  projects: Project[],
+  asOf: AsOfInstant = Date.now(),
+): string {
+  const asOfDate = toAsOfDate(asOf);
+  const summary = computePortfolioSummary(projects, asOfDate);
+  const upcoming = upcomingDueDates(projects, asOfDate);
+  const wins = completedThisWeekProjects(projects, asOfDate);
 
-  const dateStr = new Date(now).toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+  const dateStr = formatReportGeneratedAt(asOfDate);
 
   const lines: string[] = [];
   lines.push("# NIVA Mission Control — Weekly Status");
@@ -26,6 +39,7 @@ export function buildWeeklyReportMarkdown(projects: Project[], now = Date.now())
 
   lines.push("## Portfolio Summary");
   lines.push(`- Active projects: **${summary.activeProjects}**`);
+  lines.push(`- Active status: **${summary.activeStatus}**`);
   lines.push(`- On track: **${summary.onTrack}**`);
   lines.push(`- Not started: **${summary.notStarted}**`);
   lines.push(`- Blocked: **${summary.blocked}**`);
@@ -37,7 +51,9 @@ export function buildWeeklyReportMarkdown(projects: Project[], now = Date.now())
     lines.push("Nothing due in the near term.");
   } else {
     for (const project of upcoming) {
-      lines.push(`- **${project.name}** — ${formatDate(project.targetCompletion)} (${project.phase})`);
+      lines.push(
+        `- **${project.name}** — ${formatReportDate(project.targetCompletion)} (${project.phase})`,
+      );
     }
   }
   lines.push("");
@@ -45,7 +61,9 @@ export function buildWeeklyReportMarkdown(projects: Project[], now = Date.now())
   if (wins.length > 0) {
     lines.push("## Completed This Week");
     for (const project of wins) {
-      lines.push(`- ${project.name} — completed ${formatDate(project.lastUpdated)}`);
+      lines.push(
+        `- ${project.name} — completed ${formatReportDate(project.completedAt)}`,
+      );
     }
     lines.push("");
   }

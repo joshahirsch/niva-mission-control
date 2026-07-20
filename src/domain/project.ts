@@ -96,7 +96,11 @@ export const ProjectsSchema = z.array(ProjectSchema);
 /* ---- Derived executive views (produced by the business layer) ---- */
 
 export interface PortfolioSummary {
+  /** Non-completed projects (Active + Blocked + Not Started). */
   activeProjects: number;
+  /** Projects whose status enum is exactly `Active` (not the active-project total). */
+  activeStatus: number;
+  /** Health metric: non-completed, not blocked, not past due — not a status partition bucket. */
   onTrack: number;
   notStarted: number;
   blocked: number;

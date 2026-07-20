@@ -133,6 +133,7 @@ describe("GET /api/v1/delivery", () => {
     expect(typeof body.generatedAt).toBe("string");
     expect(body.summary).toMatchObject({
       activeProjects: expect.any(Number),
+      activeStatus: expect.any(Number),
       onTrack: expect.any(Number),
       notStarted: expect.any(Number),
       blocked: expect.any(Number),

@@ -2,14 +2,17 @@
 
 import { FileDown, Printer } from "lucide-react";
 import type { Project } from "@/domain/project";
-import { buildWeeklyReportMarkdown } from "@/lib/business/weekly-report";
+import {
+  buildWeeklyReportMarkdown,
+  weeklyReportFilename,
+} from "@/lib/business/weekly-report";
 import { downloadTextFile } from "@/lib/utils";
 
 export function ReportActions({ projects }: { projects: Project[] }) {
   const handleDownloadReport = () => {
-    const md = buildWeeklyReportMarkdown(projects);
-    const stamp = new Date().toISOString().slice(0, 10);
-    downloadTextFile(`niva-weekly-status-${stamp}.md`, md);
+    const asOf = new Date();
+    const md = buildWeeklyReportMarkdown(projects, asOf);
+    downloadTextFile(weeklyReportFilename(asOf), md);
   };
 
   const handlePrint = () => {
