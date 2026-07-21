@@ -1,11 +1,16 @@
 # Deploying the Mission Control private read-only API
 
 This document describes the **approved private** Cloud Run architecture for the
-versioned delivery API. It is documentation only — following this file does not
-by itself deploy, create secrets, change IAM, or alter Google Cloud resources.
+versioned read-only API (`GET /api/v1/delivery` and `GET /api/v1/weekly-report`).
+It is documentation only — following this file does not by itself deploy, create
+secrets, change IAM, or alter Google Cloud resources.
 
 Do not execute the commands below until a separate, explicit deployment phase
 is authorized.
+
+Google Docs, Google Drive, and Cloud Scheduler are **not** part of this source
+phase. They are planned downstream consumers of `GET /api/v1/weekly-report`, not
+implemented here.
 
 ---
 
@@ -16,7 +21,7 @@ Three distinct surfaces:
 | Surface | Cloud Run service | Auth | Role |
 |---|---|---|---|
 | Existing dashboard | `niva-mission-control` | **IAP-protected** (unchanged) | Mission Control UI + internal APIs |
-| Private delivery API | `niva-mission-control-api` | **Cloud Run IAM** + application bearer token | Read-only `GET /api/v1/delivery` only |
+| Private read-only API | `niva-mission-control-api` | **Cloud Run IAM** + application bearer token | Read-only `GET /api/v1/delivery` and `GET /api/v1/weekly-report` |
 | Future MCP caller | *(caller identity, not this service)* | Google service-to-service identity + bearer token | Invokes the API; does **not** receive dashboard access merely because it can invoke the API |
 
 ### Separation rules
@@ -96,6 +101,9 @@ Host: <niva-mission-control-api-host>
 X-Serverless-Authorization: Bearer <GOOGLE_IDENTITY_TOKEN>
 Authorization: Bearer <MISSION_CONTROL_API_TOKEN>
 ```
+
+The same dual-header arrangement applies to `GET /api/v1/weekly-report`
+(including optional `?asOf=…`).
 
 Rationale (verified against Cloud Run service-to-service auth docs and the
 committed `authenticateBearer` implementation):
@@ -253,7 +261,7 @@ Grant **only** (in step 4, after the application token secret exists):
 Do **not** prescribe or grant:
 
 - project-wide Secret Manager access
-- `roles/datastore.user` (the delivery GET does not read Firestore)
+- `roles/datastore.user` (the delivery and weekly-report GETs do not read Firestore)
 - Editor / Owner
 - broad Cloud Run administrative roles on the runtime account
 - Trello write permissions (the endpoint is read-only)
@@ -362,8 +370,9 @@ gcloud secrets add-iam-policy-binding mission-control-api-token `
 ## 8. Step 5 — Confirm required non-secret Trello configuration
 **(explanatory / read-only — not an operator paste step)**
 
-`GET /api/v1/delivery` reads normalized delivery data from Trello. It needs the
-same non-secret board configuration already used by the dashboard.
+`GET /api/v1/delivery` and `GET /api/v1/weekly-report` both read normalized
+delivery data from Trello (read-only). They need the same non-secret board
+configuration already used by the dashboard.
 
 This section lists **what** must be true. It does **not** instruct the operator
 to paste `$Discovered*` variables or `TRELLO_API_KEY` into §9. The authoritative
@@ -389,7 +398,7 @@ Optional (omit from the deploy command if unused on the dashboard):
 
 Do not invent new board IDs for the initial deploy.
 
-Not required for the delivery GET:
+Not required for the delivery or weekly-report GETs:
 
 - `ADMIN_EMAILS`
 - authenticated dashboard / IAP user context
@@ -1030,29 +1039,31 @@ deployment phase is authorized, expect:
 | Google identity only (valid invoker, no / wrong `Authorization`) | Request may reach the app; application returns sanitized `401` |
 | Application token only (no Google identity / no invoker) | Cloud Run IAM rejects before the app (typically `403`); bearer token alone is insufficient |
 | Valid Google identity + invalid application token | Application returns sanitized `401` |
-| Valid Google identity + valid application token | `200` JSON delivery portfolio (`schemaVersion` `1.0`), `Cache-Control: no-store` |
+| Valid Google identity + valid application token on `/api/v1/delivery` | `200` JSON delivery portfolio (`schemaVersion` `1.0`), `Cache-Control: no-store` |
+| Valid Google identity + valid application token on `/api/v1/weekly-report` | `200` Markdown weekly status (`text/markdown; charset=utf-8`), `Cache-Control: no-store`, `Content-Disposition: attachment` |
+| Valid credentials + invalid `asOf` on `/api/v1/weekly-report` | Application returns sanitized `400` (`{ "error": "Invalid asOf" }`); repository is not called |
 | Wrong-audience Google identity token (valid invoker identity; audience ≠ API service URL) | Cloud Run IAM rejects before the app (typically `403`) |
 | OAuth access token substituted for the identity token in `X-Serverless-Authorization` | Cloud Run IAM rejects before the app (typically `403`); access token ≠ identity token |
-| Non-delivery API route (e.g. `/api/projects`) with both valid credentials | Middleware returns `404` (`MISSION_CONTROL_API_ONLY=true`) |
+| Non-API route (e.g. `/api/projects`) with both valid credentials | Middleware returns `404` (`MISSION_CONTROL_API_ONLY=true`) |
 | Dashboard route (e.g. `/`) against the API-only service | Middleware returns `404` |
-| Unsupported method on `/api/v1/delivery` (e.g. `POST`) | Application/framework rejects; no write-capable delivery handler is implemented |
+| Unsupported method on `/api/v1/delivery` or `/api/v1/weekly-report` (e.g. `POST`) | Application/framework rejects; no write-capable handlers are implemented |
 | Existing dashboard `niva-mission-control` | Still IAP-protected and unaffected; traffic / revision / IAP unchanged |
 
-Upstream Trello failure on an otherwise authorized delivery request returns
-sanitized `502`.
+Upstream Trello failure on an otherwise authorized delivery or weekly-report
+request returns sanitized `502`.
 
 ### Route behavior (accurate)
 
-- API-only middleware permits the **`/api/v1/delivery` path** (pathname check).
-  It does **not** itself filter by HTTP method.
-- The committed route implements **`GET` only**.
+- API-only middleware permits **`/api/v1/delivery`** and **`/api/v1/weekly-report`**
+  by exact pathname. It does **not** itself filter by HTTP method.
+- Each committed route implements **`GET` only**.
 - Unsupported methods are rejected by the application/framework.
-- No write-capable delivery handler is implemented.
+- No write-capable delivery or weekly-report handler is implemented.
 
-Example authorized probe shape (placeholders only; do not run until authorized).
-Assumes `$ApiUrl` and `$GOOGLE_IDENTITY_TOKEN` from step 8. Load the application
-token into `$APP_BEARER_TOKEN` without printing it (operator-controlled secret
-access — not documented as echoing secret payloads).
+Example authorized delivery probe shape (placeholders only; do not run until
+authorized). Assumes `$ApiUrl` and `$GOOGLE_IDENTITY_TOKEN` from step 8. Load
+the application token into `$APP_BEARER_TOKEN` without printing it
+(operator-controlled secret access — not documented as echoing secret payloads).
 
 ```powershell
 $DeliveryUrl = "$ApiUrl/api/v1/delivery"
@@ -1065,6 +1076,21 @@ Invoke-WebRequest -Uri $DeliveryUrl -Headers @{
   "X-Serverless-Authorization" = "Bearer $GOOGLE_IDENTITY_TOKEN"
   "Authorization" = "Bearer $APP_BEARER_TOKEN"
 }
+```
+
+Example authorized weekly-report probe shape (placeholders only; do not run
+until authorized). Optional `asOf` shown for deterministic verification:
+
+```powershell
+$WeeklyReportUrl = "$ApiUrl/api/v1/weekly-report?asOf=2026-07-19T22:00:00-04:00"
+Assert-DeployVar -Name "WeeklyReportUrl" -Value $WeeklyReportUrl -Required
+Assert-DeployVar -Name "GOOGLE_IDENTITY_TOKEN" -Value $GOOGLE_IDENTITY_TOKEN -Required
+Assert-DeployVar -Name "APP_BEARER_TOKEN" -Value $APP_BEARER_TOKEN -Required
+
+Invoke-WebRequest -Uri $WeeklyReportUrl -Headers @{
+  "X-Serverless-Authorization" = "Bearer $GOOGLE_IDENTITY_TOKEN"
+  "Authorization" = "Bearer $APP_BEARER_TOKEN"
+} -OutFile "niva-weekly-status.md"
 ```
 
 ---
@@ -1238,10 +1264,11 @@ The IAP-protected dashboard remains independent throughout.
 
 ## 16. Behavioral limitation — hidden cards
 
-The delivery API does **not** currently apply Firestore hidden-card filtering.
+The delivery API and weekly-report API do **not** currently apply Firestore
+hidden-card filtering.
 
 - Cards hidden in the dashboard UI may still appear in `GET /api/v1/delivery`
-  output.
+  JSON and in `GET /api/v1/weekly-report` Markdown.
 - This difference is **accepted** for the initial private deployment.
 - Adding hidden-card parity is a separate product decision and code change.
 - Do **not** grant Firestore / `roles/datastore.user` to the API runtime
@@ -1250,6 +1277,8 @@ The delivery API does **not** currently apply Firestore hidden-card filtering.
 ---
 
 ## Endpoint summary
+
+### Delivery portfolio (JSON)
 
 ```http
 GET /api/v1/delivery
@@ -1265,6 +1294,107 @@ Authorization: Bearer <MISSION_CONTROL_API_TOKEN>
 - Middleware (API-only): permits `/api/v1/delivery` by path; method filtering is
   not performed by middleware
 - Route: `GET` only; no write-capable delivery handler
+- Credentials are accepted only via the `Authorization` header — never query
+  parameters or cookies. Cloud Run IAM still requires a valid invoker identity
+  token in `X-Serverless-Authorization`.
+
+### Weekly report (Markdown)
+
+```http
+GET /api/v1/weekly-report
+X-Serverless-Authorization: Bearer <GOOGLE_IDENTITY_TOKEN>
+Authorization: Bearer <MISSION_CONTROL_API_TOKEN>
+```
+
+Optional deterministic timestamp (testing / operator verification):
+
+```http
+GET /api/v1/weekly-report?asOf=2026-07-19T22:00:00-04:00
+X-Serverless-Authorization: Bearer <GOOGLE_IDENTITY_TOKEN>
+Authorization: Bearer <MISSION_CONTROL_API_TOKEN>
+```
+
+| Aspect | Behavior |
+|---|---|
+| Route | `GET /api/v1/weekly-report` only |
+| Auth | Same dual layers as delivery: Cloud Run IAM invoker + application bearer (`MISSION_CONTROL_API_TOKEN`, min 32 UTF-8 bytes) |
+| Middleware | API-only allowlist includes `/api/v1/weekly-report` (exact pathname) |
+| Query params | Optional `asOf` only |
+| Default time | When `asOf` is omitted, the route uses the server clock (“now”) |
+| Week window | Monday 12:00:00 AM America/New_York through `asOf` (or now) |
+| `asOf` | Optional calendar-valid ISO-8601 datetime with explicit `Z` or numeric UTC offset (e.g. `2026-07-19T22:00:00Z`). Date-only, timezone-naive, and impossible calendar dates (e.g. `2026-02-30T12:00:00Z`) are rejected with `400`. Invalid values are not replaced with “now”. |
+| Success | `200` with `Content-Type: text/markdown; charset=utf-8` |
+| Caching | `Cache-Control: no-store` |
+| Filename | `Content-Disposition: attachment; filename="niva-weekly-status-YYYY-MM-DD.md"` using the America/New_York calendar date of `asOf` (or now) |
+| Body | Same Markdown generator as the dashboard **Weekly report** button (`buildWeeklyReportMarkdown`) |
+| Errors | `401` unauthorized · `400` invalid `asOf` · `500` misconfigured token · `502` upstream failure (sanitized bodies) |
+| Upstream | Read-only repository `getProjects()` (Trello-backed when `DATA_SOURCE=trello`); no Trello writes |
+| Relationship to delivery | Sibling read-only v1 route; same auth, same API-only middleware gate, different response format |
+
+API-only mode (`MISSION_CONTROL_API_ONLY=true`) allows **only**:
+
+- `/api/v1/delivery`
+- `/api/v1/weekly-report`
+
+All other paths return plain `404`.
+
+This source phase does **not** itself:
+
+- create Google Docs;
+- write files to Google Drive;
+- create Cloud Scheduler jobs;
+- mutate Trello;
+- expose write APIs;
+- deploy production automation;
+- create or configure a ChatGPT connector.
+
+#### Example (PowerShell; placeholders only — do not run until authorized)
+
+```powershell
+# Dual auth: Layer 1 identity token + Layer 2 application bearer.
+Invoke-WebRequest `
+  -Uri "$ApiUrl/api/v1/weekly-report" `
+  -Headers @{
+    "X-Serverless-Authorization" = "Bearer $GOOGLE_IDENTITY_TOKEN"
+    "Authorization" = "Bearer $APP_BEARER_TOKEN"
+  } `
+  -OutFile "niva-weekly-status.md"
+```
+
+With a fixed `asOf`:
+
+```powershell
+Invoke-WebRequest `
+  -Uri "$ApiUrl/api/v1/weekly-report?asOf=2026-07-19T22:00:00-04:00" `
+  -Headers @{
+    "X-Serverless-Authorization" = "Bearer $GOOGLE_IDENTITY_TOKEN"
+    "Authorization" = "Bearer $APP_BEARER_TOKEN"
+  } `
+  -OutFile "niva-weekly-status.md"
+```
+
+#### Example (curl; placeholders only — do not run until authorized)
+
+```bash
+curl -fsS \
+  -H "X-Serverless-Authorization: Bearer ${GOOGLE_IDENTITY_TOKEN}" \
+  -H "Authorization: Bearer ${APP_BEARER_TOKEN}" \
+  -o niva-weekly-status.md \
+  "${API_URL}/api/v1/weekly-report"
+```
+
+With a fixed `asOf`:
+
+```bash
+curl -fsS \
+  -H "X-Serverless-Authorization: Bearer ${GOOGLE_IDENTITY_TOKEN}" \
+  -H "Authorization: Bearer ${APP_BEARER_TOKEN}" \
+  -o niva-weekly-status.md \
+  "${API_URL}/api/v1/weekly-report?asOf=2026-07-19T22:00:00-04:00"
+```
+
+Do **not** use `--allow-unauthenticated` or omit Cloud Run IAM for these
+examples. Bearer-token-only invocation is **not** an approved transport path.
 
 ---
 
@@ -1275,9 +1405,16 @@ Authorization: Bearer <MISSION_CONTROL_API_TOKEN>
 - Deploying or updating either Cloud Run service
 - Rebuilding images or running Cloud Build
 - Invoking the API or minting real tokens for live calls
+- Creating Google Docs or Google Drive files
+- Cloud Scheduler / Sunday automation wiring
 - MCP server or ChatGPT connector configuration
+- Chart generation
 - Rate limiting
 - Write / Trello-mutation APIs
 - Hidden-card parity with the dashboard
 - Changes to `niva-mission-control`, IAP, dashboard revision/traffic, or the
   existing build trigger
+
+The weekly-report **source** integration documents and implements the read-only
+Markdown export route only. It does not deploy production automation or configure
+downstream Docs / Drive / Scheduler consumers.
